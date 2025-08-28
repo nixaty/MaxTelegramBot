@@ -13,6 +13,7 @@ multidict==6.6.4
 propcache==0.3.2
 pydantic==2.11.7
 pydantic_core==2.33.2
+python-dotenv==1.1.1
 typing-inspection==0.4.1
 typing_extensions==4.15.0
 websockets==15.0.1
