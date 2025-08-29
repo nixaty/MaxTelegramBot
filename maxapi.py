@@ -14,6 +14,29 @@ headers = {
     "Origin": "https://web.max.ru",
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
 }
+seq = 3
+
+
+async def names_by_ids(ws: websockets.ClientConnection, ids: list[int]):
+    global seq
+    await ws.send(json.dumps({
+        "ver": 11,
+        "cmd": 0,
+        "seq": seq,
+        "opcode": 32,
+        "payload": {
+            "contactIds": ids
+        }
+    }))
+    response = json.loads(await ws.recv())
+    names = []
+    for user in response["payload"]["contacts"]:
+        fullname = user["names"][0]["firstName"] + user["names"][0]["lastName"]
+        names.append(fullname)
+
+    seq += 1
+
+    return names
 
 
 async def message_receiver(ws: websockets.ClientConnection, callback):
@@ -21,7 +44,7 @@ async def message_receiver(ws: websockets.ClientConnection, callback):
         async for msg in ws:
             msgjson = json.loads(msg)
             if msgjson["opcode"] == 128:
-                await callback(msgjson)
+                await callback(ws, msgjson)
                 
     except websockets.ConnectionClosed:
         print("Connection closed by server")
