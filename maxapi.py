@@ -4,9 +4,12 @@ from datetime import datetime
 import asyncio
 from dotenv import load_dotenv
 from os import getenv
+from logging import getLogger
+import tgbot
 
 
 load_dotenv()
+logger = getLogger()
 
 
 url = "wss://ws-api.oneme.ru/websocket"
@@ -39,6 +42,23 @@ async def names_by_ids(ws: websockets.ClientConnection, ids: list[int]):
     return names
 
 
+async def receiver_calback(ws: websockets.ClientConnection, msg: dict):
+    if str(msg["payload"]["chatId"]) not in str(getenv("ALLOWED_MAX_CHATS")):
+        return
+    attaches = msg["payload"]["message"]["attaches"]
+    text = msg["payload"]["message"]["text"]
+    fullname = (await names_by_ids(ws, [msg["payload"]["message"]["sender"]]))[0]
+    # if attaches:
+    #     attaches_urls = [attach["baseUrl"] for attach in attaches]
+    #     print(attaches_urls)
+
+    if text:
+        await tgbot.bot.send_message(
+            getenv("TG_CHAT_ID"), 
+            fullname+":\n  "+msg["payload"]["message"]["text"]
+        )
+
+
 async def message_receiver(ws: websockets.ClientConnection, callback):
     try:
         async for msg in ws:
@@ -47,7 +67,7 @@ async def message_receiver(ws: websockets.ClientConnection, callback):
                 await callback(ws, msgjson)
                 
     except websockets.ConnectionClosed:
-        print("Connection closed by server")
+        logger.info("Connection closed by server")
 
 
 async def start_receiver(ws: websockets.ClientConnection, callback):
@@ -66,9 +86,9 @@ async def send_auth(ws: websockets.ClientConnection):
                     "deviceType":"WEB",
                     "locale":"ru",
                     "deviceLocale":"en",
-                    "osVersion":"Linux",
+                    "osVersion":"Windows",
                     "deviceName":"Chrome",
-                    "headerUserAgent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+                    "headerUserAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
                     "appVersion":"25.8.10","screen":"1080x1920 1.0x",
                     "timezone":"Europe/Saratov"
                 },
@@ -76,27 +96,7 @@ async def send_auth(ws: websockets.ClientConnection):
             }
         }
     ))
-    await ws.send(json.dumps(
-        {
-            "ver":11,
-            "cmd":0,
-            "seq":1,
-            "opcode":5,
-            "payload":{
-                "events":[{
-                    "type":"NAV",
-                    "event":"COLD_START",
-                    "userId":39406158,
-                    "time":1756362822378,
-                    "params":{
-                        "session_id":1756362821575,
-                        "action_id":1,
-                        "screen_to":1
-                    }
-                }]
-            }
-        }
-    ))
+
     await ws.send(json.dumps(
         {
             "ver":11,
@@ -121,9 +121,9 @@ async def connect():
     return ws
 
 
-async def run(**kwargs):
+async def run():
     while True:
         ws = await connect()
         await send_auth(ws)
-        await start_receiver(ws, kwargs["callback"])
+        await start_receiver(ws, receiver_calback)
         await ws.wait_closed()
