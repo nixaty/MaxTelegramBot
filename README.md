@@ -76,12 +76,12 @@
 
 ## 🔐 MAX Authentication
 
-### Obtaining Credentials
+### Extracting session data
 
 1. **Open and https://web.max.ru and sign in**
-2. **Open google Developer Tools** by pressing f12 button
+2. **Open google Developer Tools** by pressing F12 button
 3. **Open `Application` tab**
-4. **Find section `Local Storage > https://web.max.ru`**, open and view fields :
+4. **Find section `Local Storage > https://web.max.ru`**, open and look fields :
 
    - `__oneme_auth`: In this field, after the solve "token", there is a token that you need insert into **MAX_PAYLOAD_TOKEN**
    - `__oneme_device_id`: Unique device identifier that you need insert into **MAX_DEVICE_ID**
