@@ -12,7 +12,7 @@
 
 - Python 3.8 or higher
 - Telegram Bot Token from [@BotFather](https://t.me/BotFather)
-- MAX account credentials
+- MAX session token from browser
 
 ### Installation
 
