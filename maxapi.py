@@ -151,12 +151,12 @@ async def on_update(client: MaxWSClient, msg: dict):
     payload = msg["payload"]
 
     if msg["opcode"] == 128:
-        await forward_message(client, msg)
+        if msg["payload"]["message"].get("status") == None:
+            await forward_message(client, msg)
 
 
 async def start():
     max = MaxWSClient(url, headers)
-
     await max.start()
 
     # Register events
