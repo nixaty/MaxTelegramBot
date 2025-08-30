@@ -9,7 +9,7 @@ import tgbot
 
 
 load_dotenv()
-logger = getLogger()
+logger = getLogger(__name__)
 
 
 url = "wss://ws-api.oneme.ru/websocket"
@@ -55,10 +55,19 @@ class MaxWSClient:
         self.pending = {}
         self.event_handlers = []
 
+    async def _auth(self):
+        auth_packets = await get_auth_requests()
+        await self.send_request(6, auth_packets[0])
+        await self.send_request(19, auth_packets[1])
+
     async def _connect(self):
         while True:
+            self.last_seq = -1
+            self.pending = {}
+
             self.ws = await websockets.connect(self.url, additional_headers=self.additional_headers)
-            await self._reader()
+            asyncio.create_task(self._reader())
+            await self._auth()
             await self.ws.wait_closed()
 
     async def start(self):
@@ -149,11 +158,6 @@ async def start():
     max = MaxWSClient(url, headers)
 
     await max.start()
-
-    # Send auth packets
-    auth_packets = await get_auth_requests()
-    await max.send_request(6, auth_packets[0])
-    await max.send_request(19, auth_packets[1])
 
     # Register events
     max.on_event(on_update)
