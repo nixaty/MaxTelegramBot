@@ -13,7 +13,6 @@ import maxapi
 async def main():
     asyncio.create_task(maxapi.run())
     await tgbot.bot.delete_webhook(drop_pending_updates=True)
-    print(1)
     await tgbot.dp.start_polling(tgbot.bot, allowed_updates=tgbot.dp.resolve_used_update_types())
 
 
