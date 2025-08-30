@@ -2,7 +2,7 @@
 
 **Telegram bot for forwarding messages from MAX messenger to Telegram**
 
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://python.org)
+[![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://python.org)
 [![Aiogram](https://img.shields.io/badge/Aiogram-3.x-green.svg)](https://docs.aiogram.dev/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.txt)
 
@@ -10,7 +10,7 @@
 
 ### Prerequisites
 
-- Python 3.8 or higher
+- Python 3.9 or higher
 - Telegram Bot Token from [@BotFather](https://t.me/BotFather)
 - MAX session token from browser
 
