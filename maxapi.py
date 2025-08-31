@@ -2,6 +2,7 @@ import websockets
 import json
 from datetime import datetime
 import asyncio
+import aiohttp
 from dotenv import load_dotenv
 from os import getenv
 from logging import getLogger
@@ -13,16 +14,49 @@ load_dotenv()
 logger = getLogger(__name__)
 
 
-url = "wss://ws-api.oneme.ru/websocket"
-headers = {
+ws_url = "wss://ws-api.oneme.ru/websocket"
+ws_headers = {
     "Origin": "https://web.max.ru",
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
 }
-message_format = "`{chat}` \n{sender}:\n   {message}"
+
+message_format = "> {chat} \n{sender}:\n   {message}"
+maximum_dload_file_size = 1024 * 1024 * 20
+
+tg_chat_id = getenv("TG_CHAT_ID")
 
 
 def escape_markdown_v2(text: str):
-    return re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', text)
+    escape_chars = r"_*[]()~`>#+-=|{}.!"
+    return re.sub(f"([{re.escape(escape_chars)}])", r"\\\1", text)
+
+
+async def check_file_size(url: str):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            resp.raise_for_status()
+            size = resp.headers.get("Content-Length")
+            if size == None:
+                return None
+            else:
+                return int(size) <= maximum_dload_file_size
+
+
+async def download_media(url: str):
+    headers = {
+        'User-Agent': ws_headers["User-Agent"],
+        # 'Referer': 'https://vk.com/',
+        'Accept': '*/*',
+        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+        # 'Origin': 'https://vk.com'
+    }
+
+    async with aiohttp.ClientSession(headers=headers) as session:
+        async with session.get(url) as resp:
+            resp.raise_for_status()
+            file = await resp.read()
+
+            return file
 
 
 async def get_auth_requests():
@@ -149,16 +183,48 @@ async def forward_message(client: MaxWSClient, msg: dict):
 
     text = msg["payload"]["message"]["text"]
     attaches = msg["payload"]["message"]["attaches"]
+    new_text = message_format.format(chat=chat_title, sender=fullname, message=escape_markdown_v2(text))
     
-    # if attaches:
-    #     attaches_urls = [attach["baseUrl"] for attach in attaches]
-    #     print(attaches_urls)
+    if attaches:
+        attaches_num = attaches.__len__()
+        
+        if attaches_num > 1:
+            attach_inputs = []
+            for attach in attaches:
+                _attach_type = attach.get("_type")
+                if _attach_type == "AUDIO":
+                    attach_inputs.append(tgbot.InputMediaAudio(media=attach.get("url")))
+                elif _attach_type == "PHOTO":
+                    attach_inputs.append(tgbot.InputMediaPhoto(media=attach.get("baseUrl")))
+                else:
+                    attach_inputs.append(None)
+                    await tgbot.bot.send_message(tg_chat_id, "Unsupported message")
+                    return
+            
+            attach_inputs[0].caption = new_text
+            await tgbot.bot.send_media_group(tg_chat_id, attach_inputs)
+        elif attaches_num == 1:
+            attach = attaches[0]
+            attach_type = attach.get("_type")
 
-    if text:
+            if attach_type == "AUDIO":
+                url = attach.get("url")
+                media = await download_media(url)
+                await tgbot.bot.send_audio(tg_chat_id, tgbot.BufferedInputFile(media, "audio"), caption=new_text)
+
+                # else:
+                #     await tgbot.bot.send_message(tg_chat_id, f"{new_text}\n> Files were not sent because they exceed the maximum allowed size")
+
+            elif attach_type == "PHOTO":
+                url = attach.get("baseUrl")
+                await tgbot.bot.send_photo(tg_chat_id, url, caption=new_text)
+            else:
+                await tgbot.bot.send_message(tg_chat_id, f"{new_text}\n> Unsupported message")
+
+    elif text:
         await tgbot.bot.send_message(
-            getenv("TG_CHAT_ID"), 
-            message_format.format(chat=chat_title, sender=fullname, message=escape_markdown_v2(text)),
-            parse_mode="MarkdownV2"
+            tg_chat_id, 
+            new_text,
         )
 
 
@@ -171,7 +237,7 @@ async def on_update(client: MaxWSClient, msg: dict):
 
 
 async def start():
-    max = MaxWSClient(url, headers)
+    max = MaxWSClient(ws_url, ws_headers)
     await max.start()
 
     # Register events
