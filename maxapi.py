@@ -5,6 +5,7 @@ import asyncio
 from dotenv import load_dotenv
 from os import getenv
 from logging import getLogger
+import re
 import tgbot
 
 
@@ -17,6 +18,11 @@ headers = {
     "Origin": "https://web.max.ru",
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
 }
+message_format = "`{chat}` \n{sender}:\n   {message}"
+
+
+def escape_markdown_v2(text: str):
+    return re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', text)
 
 
 async def get_auth_requests():
@@ -54,11 +60,12 @@ class MaxWSClient:
         self.last_seq = -1
         self.pending = {}
         self.event_handlers = []
+        self.init_resp_payload = None
 
     async def _auth(self):
         auth_packets = await get_auth_requests()
         await self.send_request(6, auth_packets[0])
-        await self.send_request(19, auth_packets[1])
+        self.init_resp_payload = (await self.send_request(19, auth_packets[1])).get("payload")
 
     async def _connect(self):
         while True:
@@ -101,7 +108,6 @@ class MaxWSClient:
         except websockets.ConnectionClosed:
             logger.info("Connection closed by server. Reconnecting")
 
-
     async def send_request(self, opcode, payload):
         self.last_seq += 1
         seq = self.last_seq
@@ -120,7 +126,6 @@ class MaxWSClient:
         await self.ws.send(json.dumps(packet))
         return await fut
 
-
     def on_event(self, callback):
         self.event_handlers.append(callback)
 
@@ -128,10 +133,19 @@ class MaxWSClient:
 async def forward_message(client: MaxWSClient, msg: dict):
     if str(msg["payload"]["chatId"]) not in str(getenv("ALLOWED_MAX_CHATS")):
         return
-
+    
+    chat_id = msg["payload"]["chatId"]
     uid = msg["payload"]["message"]["sender"]
+    
     contacts = (await client.send_request(32, {"contactIds":[uid]}))["payload"]["contacts"]
+    chats = client.init_resp_payload.get("chats")
+    
     fullname = contacts[0]["names"][0]["firstName"] + " " + contacts[0]["names"][0]["lastName"]
+    chat_title = None
+
+    for chat in chats:
+        if chat.get("id") == chat_id:
+            chat_title = chat.get("title", "Direct Message")
 
     text = msg["payload"]["message"]["text"]
     attaches = msg["payload"]["message"]["attaches"]
@@ -143,7 +157,8 @@ async def forward_message(client: MaxWSClient, msg: dict):
     if text:
         await tgbot.bot.send_message(
             getenv("TG_CHAT_ID"), 
-            fullname+":\n  "+msg["payload"]["message"]["text"]
+            message_format.format(chat=chat_title, sender=fullname, message=escape_markdown_v2(text)),
+            parse_mode="MarkdownV2"
         )
 
 
