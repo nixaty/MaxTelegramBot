@@ -20,7 +20,7 @@ ws_headers = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
 }
 
-message_format = "> {chat} \n{sender}:\n   {message}"
+message_format = "> {chat} \n*{sender}*:\n   {message}"
 maximum_dload_file_size = 1024 * 1024 * 20
 
 tg_chat_id = getenv("TG_CHAT_ID")
@@ -45,10 +45,8 @@ async def check_file_size(url: str):
 async def download_media(url: str):
     headers = {
         'User-Agent': ws_headers["User-Agent"],
-        # 'Referer': 'https://vk.com/',
         'Accept': '*/*',
         'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-        # 'Origin': 'https://vk.com'
     }
 
     async with aiohttp.ClientSession(headers=headers) as session:
@@ -106,7 +104,13 @@ class MaxWSClient:
             self.last_seq = -1
             self.pending = {}
 
-            self.ws = await websockets.connect(self.url, additional_headers=self.additional_headers)
+            try: 
+                self.ws = await websockets.connect(self.url, additional_headers=self.additional_headers)
+            except:
+                await asyncio.sleep(10)
+                logger.info("Unable to connect to server. Reconnecting in 10 seconds")
+                continue
+
             asyncio.create_task(self._reader())
             await self._auth()
             await self.ws.wait_closed()
@@ -164,12 +168,24 @@ class MaxWSClient:
         self.event_handlers.append(callback)
 
 
+async def get_file_dload_link(client: MaxWSClient, chat_id: int, file_id: int, message_id: str):
+    resp = await client.send_request(88, {
+        "chatId": chat_id,
+        "fileId": file_id,
+        "messageId": message_id
+    })
+
+    url = resp.get("payload").get("url")
+    return url
+
+
 async def forward_message(client: MaxWSClient, msg: dict):
     if str(msg["payload"]["chatId"]) not in str(getenv("ALLOWED_MAX_CHATS")):
         return
     
     chat_id = msg["payload"]["chatId"]
     uid = msg["payload"]["message"]["sender"]
+    message = msg["payload"]["message"]
     
     contacts = (await client.send_request(32, {"contactIds":[uid]}))["payload"]["contacts"]
     chats = client.init_resp_payload.get("chats")
@@ -193,9 +209,14 @@ async def forward_message(client: MaxWSClient, msg: dict):
             for attach in attaches:
                 _attach_type = attach.get("_type")
                 if _attach_type == "AUDIO":
-                    attach_inputs.append(tgbot.InputMediaAudio(media=attach.get("url")))
+                    media = await download_media(attach.get("url"))
+                    attach_inputs.append(tgbot.InputMediaAudio(media=media))
                 elif _attach_type == "PHOTO":
-                    attach_inputs.append(tgbot.InputMediaPhoto(media=attach.get("baseUrl")))
+                    url = attach.get("baseUrl")
+                    attach_inputs.append(tgbot.InputMediaPhoto(media=url))
+                elif _attach_type == "FILE":
+                    media = await download_media(await get_file_dload_link(client, chat_id, attach.get("fileId"), message.get("id")))
+                    attach_inputs.append(tgbot.InputMediaDocument(media=attach))
                 else:
                     attach_inputs.append(None)
                     await tgbot.bot.send_message(tg_chat_id, "Unsupported message")
@@ -212,12 +233,12 @@ async def forward_message(client: MaxWSClient, msg: dict):
                 media = await download_media(url)
                 await tgbot.bot.send_audio(tg_chat_id, tgbot.BufferedInputFile(media, "audio"), caption=new_text)
 
-                # else:
-                #     await tgbot.bot.send_message(tg_chat_id, f"{new_text}\n> Files were not sent because they exceed the maximum allowed size")
-
             elif attach_type == "PHOTO":
                 url = attach.get("baseUrl")
                 await tgbot.bot.send_photo(tg_chat_id, url, caption=new_text)
+            elif attach_type == "FILE":
+                media = await download_media(await get_file_dload_link(client, chat_id, attach.get("fileId"), message.get("id")))
+                await tgbot.bot.send_document(tg_chat_id, tgbot.BufferedInputFile(media, attach.get("name")), caption=new_text)
             else:
                 await tgbot.bot.send_message(tg_chat_id, f"{new_text}\n> Unsupported message")
 
