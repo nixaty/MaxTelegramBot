@@ -179,6 +179,22 @@ async def get_file_dload_link(client: MaxWSClient, chat_id: int, file_id: int, m
     return url
 
 
+async def get_video_dload_link(client: MaxWSClient, chat_id: int, video_id: int, message_id: int):
+    resp = await client.send_request(83, {
+        "chatId": chat_id,
+        "messageId": message_id,
+        "videoId": video_id
+    })
+    payload = resp.get("payload")
+    url = None
+
+    for key in payload:
+        if key.startswith("MP4"):
+            url = payload.get(key)
+
+    return url
+
+
 async def forward_message(client: MaxWSClient, msg: dict):
     if str(msg["payload"]["chatId"]) not in str(getenv("ALLOWED_MAX_CHATS")):
         return
@@ -206,17 +222,28 @@ async def forward_message(client: MaxWSClient, msg: dict):
         
         if attaches_num > 1:
             attach_inputs = []
+
             for attach in attaches:
                 _attach_type = attach.get("_type")
+
                 if _attach_type == "AUDIO":
                     media = await download_media(attach.get("url"))
                     attach_inputs.append(tgbot.InputMediaAudio(media=media))
+
                 elif _attach_type == "PHOTO":
                     url = attach.get("baseUrl")
                     attach_inputs.append(tgbot.InputMediaPhoto(media=url))
+
                 elif _attach_type == "FILE":
                     media = await download_media(await get_file_dload_link(client, chat_id, attach.get("fileId"), message.get("id")))
-                    attach_inputs.append(tgbot.InputMediaDocument(media=attach))
+                    attach_inputs.append(tgbot.BufferedInputFile(media=media, filename=attach.get("name")))
+
+                elif _attach_type == "VIDEO":
+                    media = await download_media(await get_video_dload_link(client, chat_id, attach.get("videoId"), message.get("id")))
+                    attach_inputs.append(tgbot.InputMediaVideo(
+                        media=tgbot.BufferedInputFile(media, filename=str(attach.get("videoId"))),
+                    ))
+
                 else:
                     attach_inputs.append(None)
                     await tgbot.bot.send_message(tg_chat_id, "Unsupported message")
@@ -224,6 +251,7 @@ async def forward_message(client: MaxWSClient, msg: dict):
             
             attach_inputs[0].caption = new_text
             await tgbot.bot.send_media_group(tg_chat_id, attach_inputs)
+
         elif attaches_num == 1:
             attach = attaches[0]
             attach_type = attach.get("_type")
@@ -231,14 +259,20 @@ async def forward_message(client: MaxWSClient, msg: dict):
             if attach_type == "AUDIO":
                 url = attach.get("url")
                 media = await download_media(url)
-                await tgbot.bot.send_audio(tg_chat_id, tgbot.BufferedInputFile(media, "audio"), caption=new_text)
+                await tgbot.bot.send_audio(tg_chat_id, tgbot.BufferedInputFile(media, str(attach.get("audioId"))), caption=new_text)
 
             elif attach_type == "PHOTO":
                 url = attach.get("baseUrl")
                 await tgbot.bot.send_photo(tg_chat_id, url, caption=new_text)
+
             elif attach_type == "FILE":
                 media = await download_media(await get_file_dload_link(client, chat_id, attach.get("fileId"), message.get("id")))
                 await tgbot.bot.send_document(tg_chat_id, tgbot.BufferedInputFile(media, attach.get("name")), caption=new_text)
+
+            elif attach_type == "VIDEO":
+                media = await download_media(await get_video_dload_link(client, chat_id, attach.get("videoId"), message.get("id")))
+                await tgbot.bot.send_video(tg_chat_id, tgbot.BufferedInputFile(media, str(attach.get("videoId"))), caption=new_text)
+
             else:
                 await tgbot.bot.send_message(tg_chat_id, f"{new_text}\n> Unsupported message")
 
