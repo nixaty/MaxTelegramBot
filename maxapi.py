@@ -8,6 +8,7 @@ from os import getenv
 from logging import getLogger
 import re
 import tgbot
+import texts
 
 
 load_dotenv()
@@ -144,7 +145,8 @@ class MaxWSClient:
                     asyncio.create_task(handler(self, data))
 
         except websockets.ConnectionClosed:
-            logger.info("Connection closed by server. Reconnecting")
+            # logger.info("Connection closed by server. Reconnecting")
+            pass
 
     async def send_request(self, opcode, payload):
         self.last_seq += 1
@@ -193,6 +195,16 @@ async def get_video_dload_link(client: MaxWSClient, chat_id: int, video_id: int,
             url = payload.get(key)
 
     return url
+
+
+async def get_names_by_uids(client: MaxWSClient, uids: list[int]):
+    contacts = (await client.send_request(32, {"contactIds":uids}))["payload"]["contacts"]
+    names = []
+    
+    for contact in contacts:
+        names.append(contact.get("names")[0].get("firstName") + " " + contact.get("names")[0].get("lastName"))
+
+    return names
 
 
 async def forward_message(client: MaxWSClient, msg: dict):
@@ -246,7 +258,7 @@ async def forward_message(client: MaxWSClient, msg: dict):
 
                 else:
                     attach_inputs.append(None)
-                    await tgbot.bot.send_message(tg_chat_id, "Unsupported message")
+                    await tgbot.bot.send_message(tg_chat_id, f"{new_text}\n> Unsupported message")
                     return
             
             attach_inputs[0].caption = new_text
@@ -272,6 +284,40 @@ async def forward_message(client: MaxWSClient, msg: dict):
             elif attach_type == "VIDEO":
                 media = await download_media(await get_video_dload_link(client, chat_id, attach.get("videoId"), message.get("id")))
                 await tgbot.bot.send_video(tg_chat_id, tgbot.BufferedInputFile(media, str(attach.get("videoId"))), caption=new_text)
+            
+            elif attach_type == "CONTROL":
+                if attach.get("event") == "add":
+                    added_users = await get_names_by_uids(client, attach.get("userIds"))
+                    added_users_str = ", ".join(added_users)
+
+                    await tgbot.bot.send_message(tg_chat_id, new_text + " \n" + texts.added_member.format(
+                        sender=fullname,
+                        added=added_users_str
+                    ))
+                
+                elif attach.get("event") == "remove":
+                    removed_users = await get_names_by_uids(client, [attach.get("userId")])
+                    removed_users_str = ", ".join(removed_users)
+
+                    await tgbot.bot.send_message(tg_chat_id, new_text + " \n" + texts.removed_member.format(
+                        sender=fullname,
+                        removed=removed_users_str
+                    ))
+
+                elif attach.get("event") == "joinByLink":
+                    joined_users = await get_names_by_uids(client, [attach.get("userId")])
+                    joined_users_str = ", ".join(joined_users)
+
+                    await tgbot.bot.send_message(tg_chat_id, new_text + " \n" + texts.joined_by_link_member.format(
+                        sender=joined_users_str
+                    ))
+
+                elif attach.get("event") == "leave":
+                    left_users_str = fullname
+
+                    await tgbot.bot.send_message(tg_chat_id, new_text + " \n" + texts.left_chat.format(
+                        sender=left_users_str
+                    ))
 
             else:
                 await tgbot.bot.send_message(tg_chat_id, f"{new_text}\n> Unsupported message")
