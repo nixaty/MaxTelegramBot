@@ -108,8 +108,8 @@ class MaxWSClient:
             try: 
                 self.ws = await websockets.connect(self.url, additional_headers=self.additional_headers)
             except:
-                await asyncio.sleep(10)
                 logger.info("Unable to connect to server. Reconnecting in 10 seconds")
+                await asyncio.sleep(10)
                 continue
 
             asyncio.create_task(self._reader())
@@ -285,6 +285,9 @@ async def forward_message(client: MaxWSClient, msg: dict):
                 media = await download_media(await get_video_dload_link(client, chat_id, attach.get("videoId"), message.get("id")))
                 await tgbot.bot.send_video(tg_chat_id, tgbot.BufferedInputFile(media, str(attach.get("videoId"))), caption=new_text)
             
+            elif attach_type == "SHARE":
+                await tgbot.bot.send_message(tg_chat_id, new_text, disable_web_page_preview=False)
+            
             elif attach_type == "CONTROL":
                 if attach.get("event") == "add":
                     added_users = await get_names_by_uids(client, attach.get("userIds"))
@@ -326,6 +329,7 @@ async def forward_message(client: MaxWSClient, msg: dict):
         await tgbot.bot.send_message(
             tg_chat_id, 
             new_text,
+            disable_web_page_preview=True
         )
 
 
