@@ -55,6 +55,12 @@
 
    # Settings
    ALLOWED_MAX_CHATS="-62349573987, -5723478753, -1234567890"
+
+   # Telegram proxy:
+   # if zero — directly
+   # else — use proxy (http, socks)
+   # example: "{protocol}://{ip}:{port}"
+   TG_PROXY = ""
    ```
 
 6. **Start bot**
@@ -73,7 +79,7 @@
 | `MAX_PAYLOAD_TOKEN` | MAX authentication token | See "MAX Authentication" section below |
 | `MAX_DEVICE_ID` | MAX device identifier | See "MAX Authentication" section below |
 | `ALLOWED_MAX_CHATS` | Comma-separated list of MAX chat IDs to forward | Get from url when chat opened |
-
+| `TG_PROXY` | Link to a proxy for connecting to Telegram | _Optional*_ Get the link you need on your VPN |
 ## 🔐 MAX Authentication
 
 ### Extracting session data

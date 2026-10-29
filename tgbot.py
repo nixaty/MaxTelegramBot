@@ -1,15 +1,17 @@
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, session
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import InputMediaPhoto, InputMediaVideo, InputMediaAudio, InputMediaDocument, InputMediaAnimation, BufferedInputFile
 from dotenv import load_dotenv
 from os import getenv
 import asyncio
-
+from aiogram.client.session.aiohttp import AiohttpSession
 
 load_dotenv()
 
-
-bot = Bot(getenv("TG_BOT_TOKEN"), default=DefaultBotProperties(
-    parse_mode="MarkdownV2"
-))
+tg_proxy = getenv("TG_PROXY")
+bot = Bot(
+    token=getenv("TG_BOT_TOKEN"), 
+    session=AiohttpSession(proxy=tg_proxy) if tg_proxy else None,
+    default=DefaultBotProperties(parse_mode="MarkdownV2")
+)
 dp = Dispatcher()
